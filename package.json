@@ -1,40 +1,7 @@
 {
-  "name": "daily-inspiration",
-  "version": "1.0.0",
+  "name": "my-v0-project",
+  "version": "0.1.0",
   "private": true,
-  "description": "Uma aplicação web que traz alegria através de citações inspiradoras e motivacionais",
-  "keywords": [
-    "react",
-    "nextjs",
-    "typescript",
-    "citações",
-    "inspiração",
-    "motivação",
-    "bem-estar"
-  ],
-  "homepage": "https://dailyinspiration.vercel.app",
-  "bugs": {
-    "url": "https://github.com/nicolasmacardoso/daily-inspiration/issues"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/nicolasmacardoso/daily-inspiration.git"
-  },
-  "license": "MIT",
-  "author": {
-    "name": "Nícolas Machado Cardoso e Marlon Pasini",
-    "email": "contato@dailyinspiration.com"
-  },
-  "contributors": [
-    {
-      "name": "Nícolas Machado Cardoso",
-      "email": "nicolas@dailyinspiration.com"
-    },
-    {
-      "name": "Marlon Pasini",
-      "email": "marlon@dailyinspiration.com"
-    }
-  ],
   "scripts": {
     "build": "next build",
     "dev": "next dev",
