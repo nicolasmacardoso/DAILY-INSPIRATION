@@ -253,16 +253,16 @@ const translateText = async (text: string, fromLang = "en", toLang = "pt"): Prom
   }
 }
 
-// Função para traduzir uma citação completa
-const translateQuote = async (quote: Quote): Promise<Quote> => {
+// Função para traduzir uma citação completa PRESERVANDO a categoria original
+const translateQuote = async (quote: Quote, preserveCategory?: string): Promise<Quote> => {
   try {
     const translatedText = await translateText(quote.text)
 
     return {
       ...quote,
       text: translatedText,
-      category: "Inspiracional", // Categoria padrão para citações traduzidas
-      tags: ["inspiracional", "traduzida"],
+      category: preserveCategory || quote.category, // Preservar categoria se fornecida
+      tags: preserveCategory ? [preserveCategory.toLowerCase(), "traduzida"] : quote.tags,
     }
   } catch (error) {
     console.log("Erro ao traduzir citação:", error)
@@ -271,7 +271,7 @@ const translateQuote = async (quote: Quote): Promise<Quote> => {
 }
 
 export function QuoteProvider({ children }: { children: ReactNode }) {
-  const [quotes, setQuotes] = useState<Quote[]>(localQuotes)
+  const [quotes, setQuotes] = useState<Quote[]>(localQuotes) // Inicializar com todas as citações locais
   const [currentQuote, setCurrentQuote] = useState<Quote | null>(null)
   const [loading, setLoading] = useState(false)
   const [searchLoading, setSearchLoading] = useState(false)
@@ -280,55 +280,40 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
 
   const categories = availableCategories
 
-  // Função para tentar API, com fallback para dados locais
-  const tryApiOrFallback = async (
-    apiCall: () => Promise<any>,
-    fallbackData: Quote[],
-    errorMessage: string,
-  ): Promise<Quote[]> => {
-    try {
-      const result = await apiCall()
-      return result
-    } catch (err) {
-      console.log(`API indisponível, usando dados locais: ${errorMessage}`)
-      return fallbackData
-    }
-  }
-
   const fetchRandomQuote = async () => {
     setLoading(true)
     setError(null)
 
     try {
       // Tentar API primeiro, fallback para dados locais
-      const quotes = await tryApiOrFallback(
-        async () => {
-          const response = await fetch(`${QUOTABLE_API}/random`)
-          if (!response.ok) throw new Error("API error")
-          const data = await response.json()
+      let selectedQuote: Quote
 
-          const originalQuote: Quote = {
-            id: data._id,
-            text: data.content,
-            author: data.author,
-            category: "Inspiracional",
-            tags: data.tags || ["inspiracional"],
-          }
+      try {
+        const response = await fetch(`${QUOTABLE_API}/random`)
+        if (!response.ok) throw new Error("API error")
+        const data = await response.json()
 
-          // Traduzir a citação
-          console.log("Traduzindo citação da API...")
-          const translatedQuote = await translateQuote(originalQuote)
-          console.log("Citação traduzida:", translatedQuote.text)
+        const originalQuote: Quote = {
+          id: data._id,
+          text: data.content,
+          author: data.author,
+          category: "Inspiracional",
+          tags: data.tags || ["inspiracional"],
+        }
 
-          return [translatedQuote]
-        },
-        localQuotes,
-        "citação aleatória",
-      )
+        // Traduzir a citação
+        console.log("Traduzindo citação da API...")
+        selectedQuote = await translateQuote(originalQuote, "Inspiracional")
+        console.log("Citação traduzida:", selectedQuote.text)
+        setDataSource("api")
+      } catch (err) {
+        console.log("API indisponível, usando dados locais")
+        const randomIndex = Math.floor(Math.random() * localQuotes.length)
+        selectedQuote = localQuotes[randomIndex]
+        setDataSource("local")
+      }
 
-      const randomIndex = Math.floor(Math.random() * quotes.length)
-      setCurrentQuote(quotes[randomIndex])
-      setDataSource(quotes === localQuotes ? "local" : "api")
+      setCurrentQuote(selectedQuote)
     } catch (err) {
       console.error("Erro geral:", err)
       const randomIndex = Math.floor(Math.random() * localQuotes.length)
@@ -344,10 +329,19 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
     setError(null)
 
     try {
-      // Tentar buscar na API por categoria/tag
-      const quotes = await tryApiOrFallback(
-        async () => {
-          // Mapear categorias para tags em inglês
+      // SEMPRE usar dados locais primeiro para garantir que a categoria funcione
+      const localFiltered = localQuotes.filter((q) => q.category === category)
+
+      if (localFiltered.length > 0) {
+        console.log(`Encontradas ${localFiltered.length} citações locais da categoria ${category}`)
+        setQuotes(localFiltered)
+        const randomIndex = Math.floor(Math.random() * localFiltered.length)
+        setCurrentQuote(localFiltered[randomIndex])
+        setDataSource("local")
+        setError(null)
+      } else {
+        // Se não há citações locais, tentar API
+        try {
           const categoryMap: { [key: string]: string } = {
             Motivacional: "motivational",
             Inspiracional: "inspirational",
@@ -369,7 +363,7 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
             throw new Error("No results")
           }
 
-          // Traduzir todas as citações
+          // Traduzir todas as citações PRESERVANDO a categoria
           console.log(`Traduzindo ${data.results.length} citações da categoria ${category}...`)
           const translatedQuotes = await Promise.all(
             data.results.map(async (apiQuote: any) => {
@@ -377,30 +371,33 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
                 id: apiQuote._id,
                 text: apiQuote.content,
                 author: apiQuote.author,
-                category: category, // Usar a categoria em português
-                tags: [category.toLowerCase(), "traduzida"],
+                category: "Inspiracional", // Temporário
+                tags: apiQuote.tags || [],
               }
 
-              return await translateQuote(originalQuote)
+              return await translateQuote(originalQuote, category) // PRESERVAR categoria
             }),
           )
 
           console.log("Citações traduzidas com sucesso!")
-          return translatedQuotes
-        },
-        localQuotes.filter((q) => q.category === category),
-        `categoria ${category}`,
-      )
-
-      setQuotes(quotes)
-      if (quotes.length > 0) {
-        const randomIndex = Math.floor(Math.random() * quotes.length)
-        setCurrentQuote(quotes[randomIndex])
+          setQuotes(translatedQuotes)
+          const randomIndex = Math.floor(Math.random() * translatedQuotes.length)
+          setCurrentQuote(translatedQuotes[randomIndex])
+          setDataSource("api")
+          setError(null)
+        } catch (apiErr) {
+          console.log("API falhou, nenhuma citação local encontrada")
+          setError(`Nenhuma citação encontrada para a categoria "${category}".`)
+          setQuotes([])
+          setCurrentQuote(null)
+          setDataSource("local")
+        }
       }
-      setDataSource(quotes === localQuotes.filter((q) => q.category === category) ? "local" : "api")
     } catch (err) {
       console.error("Erro ao filtrar por categoria:", err)
       setError("Erro ao filtrar citações")
+      setQuotes([])
+      setCurrentQuote(null)
     } finally {
       setLoading(false)
     }
@@ -411,9 +408,22 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
     setError(null)
 
     try {
-      // Tentar buscar na API por autor
-      const quotes = await tryApiOrFallback(
-        async () => {
+      // Buscar primeiro nos dados locais
+      const localResults = localQuotes.filter(
+        (q) =>
+          q.text.toLowerCase().includes(query.toLowerCase()) ||
+          q.author.toLowerCase().includes(query.toLowerCase()) ||
+          q.tags.some((tag) => tag.toLowerCase().includes(query.toLowerCase())),
+      )
+
+      if (localResults.length > 0) {
+        console.log(`Encontradas ${localResults.length} citações locais para "${query}"`)
+        setQuotes(localResults)
+        setDataSource("local")
+        setError(null)
+      } else {
+        // Tentar API se não encontrou localmente
+        try {
           const response = await fetch(`${QUOTABLE_API}/quotes?author=${encodeURIComponent(query)}&limit=6`)
 
           if (!response.ok) throw new Error("API error")
@@ -435,39 +445,21 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
                 tags: ["busca", "traduzida"],
               }
 
-              return await translateQuote(originalQuote)
+              return await translateQuote(originalQuote, "Inspiracional")
             }),
           )
 
           console.log("Citações de busca traduzidas com sucesso!")
-          return translatedQuotes
-        },
-        // Fallback: buscar nos dados locais
-        localQuotes.filter(
-          (q) =>
-            q.text.toLowerCase().includes(query.toLowerCase()) ||
-            q.author.toLowerCase().includes(query.toLowerCase()) ||
-            q.tags.some((tag) => tag.toLowerCase().includes(query.toLowerCase())),
-        ),
-        `busca por "${query}"`,
-      )
-
-      setQuotes(quotes)
-
-      if (quotes.length === 0) {
-        setError("Nenhuma citação encontrada para sua busca.")
+          setQuotes(translatedQuotes)
+          setDataSource("api")
+          setError(null)
+        } catch (apiErr) {
+          console.log("API falhou e nenhum resultado local")
+          setError(`Nenhuma citação encontrada para "${query}".`)
+          setQuotes([])
+          setDataSource("local")
+        }
       }
-      setDataSource(
-        quotes ===
-          localQuotes.filter(
-            (q) =>
-              q.text.toLowerCase().includes(query.toLowerCase()) ||
-              q.author.toLowerCase().includes(query.toLowerCase()) ||
-              q.tags.some((tag) => tag.toLowerCase().includes(query.toLowerCase())),
-          )
-          ? "local"
-          : "api",
-      )
     } catch (err) {
       console.error("Erro ao buscar citações:", err)
       setError("Erro ao buscar citações")
@@ -482,17 +474,20 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
     setError(null)
 
     try {
-      // Tentar carregar citações variadas da API
-      const quotes = await tryApiOrFallback(
-        async () => {
-          const response = await fetch(`${QUOTABLE_API}/quotes?page=1&limit=8`)
-          if (!response.ok) throw new Error("API error")
-          const data = await response.json()
+      // Sempre começar com dados locais para garantir que funcione
+      setQuotes(localQuotes)
+      const randomIndex = Math.floor(Math.random() * localQuotes.length)
+      setCurrentQuote(localQuotes[randomIndex])
+      setDataSource("local")
+      setError(null)
 
-          if (!data.results || data.results.length === 0) {
-            throw new Error("No results")
-          }
+      // Tentar carregar da API em background
+      try {
+        const response = await fetch(`${QUOTABLE_API}/quotes?page=1&limit=8`)
+        if (!response.ok) throw new Error("API error")
+        const data = await response.json()
 
+        if (data.results && data.results.length > 0) {
           // Traduzir todas as citações
           console.log(`Traduzindo ${data.results.length} citações padrão...`)
           const translatedQuotes = await Promise.all(
@@ -505,24 +500,27 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
                 tags: ["inspiracional", "traduzida"],
               }
 
-              return await translateQuote(originalQuote)
+              return await translateQuote(originalQuote, "Inspiracional")
             }),
           )
 
           console.log("Citações padrão traduzidas com sucesso!")
-          return translatedQuotes
-        },
-        localQuotes,
-        "citações padrão",
-      )
-
-      setQuotes(quotes)
-      const randomIndex = Math.floor(Math.random() * quotes.length)
-      setCurrentQuote(quotes[randomIndex])
-      setDataSource(quotes === localQuotes ? "local" : "api")
+          // Combinar com dados locais
+          const allQuotes = [...localQuotes, ...translatedQuotes]
+          setQuotes(allQuotes)
+          setDataSource("mixed")
+        }
+      } catch (apiErr) {
+        console.log("API indisponível, mantendo dados locais")
+        // Manter dados locais que já foram definidos
+      }
     } catch (err) {
       console.error("Erro ao resetar:", err)
-      setError("Erro ao carregar citações")
+      // Garantir que sempre há dados
+      setQuotes(localQuotes)
+      const randomIndex = Math.floor(Math.random() * localQuotes.length)
+      setCurrentQuote(localQuotes[randomIndex])
+      setDataSource("local")
     } finally {
       setLoading(false)
     }
