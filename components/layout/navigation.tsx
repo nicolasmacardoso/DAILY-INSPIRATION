@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useQuotes } from "@/contexts/quote-context"
 import { useUserQuotes } from "@/contexts/user-quotes-context"
+import { useFavorites } from "@/contexts/favorites-context"
 
 interface NavigationProps {
   onTabChange?: (tab: string) => void
@@ -20,6 +21,7 @@ export default function Navigation({ onTabChange }: NavigationProps = {}) {
   const [loading, setLoading] = useState(false)
   const { categories, searchQuotes, fetchQuotesByCategory, resetToDefault } = useQuotes()
   const { userQuotes } = useUserQuotes()
+  const { favorites } = useFavorites()
 
   // Observar mudanças no campo de busca
   useEffect(() => {
@@ -40,6 +42,7 @@ export default function Navigation({ onTabChange }: NavigationProps = {}) {
       setSelectedCategory(null)
       await searchQuotes(searchQuery)
       setActiveTab("search")
+      onTabChange?.("search")
       setLoading(false)
     }
   }
@@ -50,6 +53,7 @@ export default function Navigation({ onTabChange }: NavigationProps = {}) {
     setSelectedCategory(category)
     await fetchQuotesByCategory(category)
     setActiveTab("category")
+    onTabChange?.("category")
     setLoading(false)
   }
 
@@ -78,6 +82,14 @@ export default function Navigation({ onTabChange }: NavigationProps = {}) {
     // Não precisa de loading aqui pois são dados locais
   }
 
+  const handleFavorites = () => {
+    setSearchQuery("")
+    setSelectedCategory(null)
+    setActiveTab("favorites")
+    onTabChange?.("favorites")
+    // Não precisa de loading aqui pois são dados locais
+  }
+
   return (
     <nav className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 transition-colors duration-300">
       <div className="container mx-auto px-4 py-4">
@@ -98,14 +110,11 @@ export default function Navigation({ onTabChange }: NavigationProps = {}) {
               <Button
                 variant={activeTab === "favorites" ? "default" : "outline"}
                 size="sm"
-                onClick={() => {
-                  setActiveTab("favorites")
-                  onTabChange?.("favorites")
-                }}
+                onClick={handleFavorites}
                 className="flex items-center gap-2"
               >
                 <Heart className="h-4 w-4" />
-                Favoritos
+                Favoritos ({favorites.length})
               </Button>
               <Button
                 variant={activeTab === "my-quotes" ? "default" : "outline"}
@@ -147,42 +156,44 @@ export default function Navigation({ onTabChange }: NavigationProps = {}) {
             </form>
           </div>
 
-          {/* Segunda linha: Filtros por categoria */}
-          <div className="flex gap-2 flex-wrap justify-center sm:justify-start">
-            {categories.map((category) => (
-              <Button
-                key={category}
-                variant={selectedCategory === category ? "default" : "outline"}
-                size="sm"
-                onClick={() => (selectedCategory === category ? null : handleCategoryFilter(category))}
-                disabled={loading}
-                className={`text-xs disabled:opacity-50 transition-colors capitalize ${
-                  selectedCategory === category
-                    ? "bg-indigo-600 hover:bg-indigo-700 text-white dark:bg-indigo-500 dark:hover:bg-indigo-600"
-                    : ""
-                }`}
-              >
-                <Filter className="h-3 w-3 mr-1" />
-                {category}
-                {selectedCategory === category && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleReset()
-                    }}
-                    className="ml-1 hover:bg-indigo-700 dark:hover:bg-indigo-600 rounded-full p-0.5 transition-colors"
-                    disabled={loading}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                )}
-              </Button>
-            ))}
-          </div>
+          {/* Segunda linha: Filtros por categoria - apenas se não estiver em favoritos ou minhas citações */}
+          {activeTab !== "favorites" && activeTab !== "my-quotes" && (
+            <div className="flex gap-2 flex-wrap justify-center sm:justify-start">
+              {categories.map((category) => (
+                <Button
+                  key={category}
+                  variant={selectedCategory === category ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => (selectedCategory === category ? null : handleCategoryFilter(category))}
+                  disabled={loading}
+                  className={`text-xs disabled:opacity-50 transition-colors capitalize ${
+                    selectedCategory === category
+                      ? "bg-indigo-600 hover:bg-indigo-700 text-white dark:bg-indigo-500 dark:hover:bg-indigo-600"
+                      : ""
+                  }`}
+                >
+                  <Filter className="h-3 w-3 mr-1" />
+                  {category}
+                  {selectedCategory === category && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleReset()
+                      }}
+                      className="ml-1 hover:bg-indigo-700 dark:hover:bg-indigo-600 rounded-full p-0.5 transition-colors"
+                      disabled={loading}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </Button>
+              ))}
+            </div>
+          )}
 
           {/* Indicador de filtro ativo */}
-          {(selectedCategory || searchQuery) && (
+          {(selectedCategory || searchQuery) && activeTab !== "favorites" && activeTab !== "my-quotes" && (
             <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 justify-center sm:justify-start">
               <Filter className="h-4 w-4" />
               {selectedCategory && (
